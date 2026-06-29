@@ -18,13 +18,15 @@ export default function App() {
     { id: "2", username: "sarahodd", role: "UI Designer", isOnline: false, messagesSent: 0 }
   ]);
 
-  // -------------------------------------------------------------
-  // CHANGE 1: We replaced the two separate state lines with ONE object
-  // -------------------------------------------------------------
   const [formData, setFormData] = useState({
     username: "",
     role: ""
   });
+  // for errors
+  const [formErrors, setFormErrors] = useState({
+  username: "",
+  role: ""
+});
 
   const [onScreenLogs, setOnScreenLogs] = useState<string[]>([]);
   const totalClicksTracker = useRef<number>(0);
@@ -38,26 +40,51 @@ export default function App() {
     pushLog("🚀 EFFECT 1 triggered: Webpage loaded completely for the first time!");
   }, []);
 
-  // -------------------------------------------------------------
-  // CHANGE 2: Added the smart centralized updater function
-  // -------------------------------------------------------------
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
     setFormData((prev) => ({
-      ...prev,          // Copy whatever is currently in the object
-      [name]: value     // Update only the specific field that was typed in
+      ...prev,
+      [name]: value
     }));
   };
 
   const handleCreateProfile = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // CHANGE 3: We now check our single formData object instead of standalone variables
-    if (!formData.username.trim() || !formData.role.trim()) {
-      alert("Please fill in both fields first!");
+
+
+    // --- START OF VALIDATION BOUNCER ---
+    // Create a temporary object to hold any errors we find
+    let errorsFound = { username: "", role: "" };
+    let isDataValid = true;
+
+    // Rule 1 & 2: Username checks
+    if (formData.username.trim().length < 3){
+      errorsFound.username = "Username must be at least 3 characters long.";
+      isDataValid = false;
+    }
+    else if (formData.username.includes(" ")){
+      errorsFound.username = "Username cannot contain spaces.";
+      isDataValid = false;
+    }
+
+    // Rule 3: Role check
+    if (!formData.role.trim()){
+      errorsFound.role = "Please provide a job role.";
+      isDataValid = false;
+    }
+
+    // Update our React state so the UI shows the red text (if any)
+    setFormErrors(errorsFound);
+
+    // If the bouncer found errors, STOP right here. Do not create the card.
+    if (!isDataValid) {
+      pushLog("⚠️ [ERROR]: Profile creation blocked due to invalid data.");
       return;
     }
+    // --- END OF VALIDATION BOUNCER ---
 
     const newProfile: Profile = {
       id: Date.now().toString(),
@@ -119,38 +146,46 @@ export default function App() {
         </header>
 
         <div style={{ backgroundColor: "#f0f4f8", padding: "20px", borderRadius: "8px", marginBottom: "25px" }}>
-          <form onSubmit={handleCreateProfile} style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "15px" }}>
+          <form onSubmit={handleCreateProfile} style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "15px" }}>
+  
+            {/* Username Section */}
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <input
+                ref={messageInputRef}
+                type="text"
+                name="username"
+                placeholder="Username..."
+                value={formData.username}
+                onChange={handleInputChange}
+                // Give it a red border if there is an error!
+                style={{ padding: "10px", border: formErrors.username ? "2px solid red" : "1px solid #ccc", borderRadius: "4px" }}
+              />
+              {/* If formErrors.username has text, display this red span */}
+              {formErrors.username && (
+                <span style={{ color: "red", fontSize: "0.85rem", marginTop: "4px", fontWeight: "bold" }}>
+                  {formErrors.username}
+                </span>
+              )}
+            </div>
             
-            {/* CHANGE 5:
-                - Added name="username"
-                - Set value to formData.username
-                - Passed our smart handleInputChange function
-            */}
-            <input
-              ref={messageInputRef}
-              type="text"
-              name="username"
-              placeholder="Username..."
-              value={formData.username}
-              onChange={handleInputChange}
-              style={{ padding: "10px", border: "1px solid #ccc", borderRadius: "4px", flex: 1 }}
-            />
+            {/* Role Section */}
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <input
+                type="text"
+                name="role"
+                placeholder="Job Role..."
+                value={formData.role}
+                onChange={handleInputChange}
+                style={{ padding: "10px", border: formErrors.role ? "2px solid red" : "1px solid #ccc", borderRadius: "4px" }}
+              />
+              {formErrors.role && (
+                <span style={{ color: "red", fontSize: "0.85rem", marginTop: "4px", fontWeight: "bold" }}>
+                  {formErrors.role}
+                </span>
+              )}
+            </div>
             
-            {/* CHANGE 6:
-                - Added name="role"
-                - Set value to formData.role
-                - Passed our smart handleInputChange function
-            */}
-            <input
-              type="text"
-              name="role"
-              placeholder="Job Role..."
-              value={formData.role}
-              onChange={handleInputChange}
-              style={{ padding: "10px", border: "1px solid #ccc", borderRadius: "4px", flex: 1 }}
-            />
-            
-            <button type="submit" style={{ padding: "10px 15px", backgroundColor: "#28a745", color: "white", border: "none", borderRadius: "4px", fontWeight: "bold", cursor: "pointer" }}>
+            <button type="submit" style={{ padding: "10px 15px", backgroundColor: "#28a745", color: "white", border: "none", borderRadius: "4px", fontWeight: "bold", cursor: "pointer", width: "150px" }}>
               Create Card
             </button>
           </form>
