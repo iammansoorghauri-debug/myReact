@@ -1,233 +1,204 @@
 // src/App.tsx
-import { useState, useEffect, createContext, useRef } from "react";
-import { UserProfileCard } from "./components/UserProfileCard";
 
+import { useState, useEffect, createContext, useRef, useOptimistic, startTransition } from "react";
+import { UserProfileCard } from "./components/UserProfileCard";
+import { LoginForm } from "./components/LoginForm";
+
+// Typescript interface to define the shape of our User Profile data.
 interface Profile {
   id: string;
   username: string;
+  password: string;
   role: string;
   isOnline: boolean;
   messagesSent: number;
 }
 
+/* CONCEPT: Context API (createContext)
+  Why? To avoid "prop drilling". Instead of passing the `pushLog` function
+  down through every single component layer as a prop, any child component
+  can now consume this context to write logs to the screen.
+*/
 export const LogContext = createContext<((text: string) => void) | null>(null);
 
 export default function App() {
+  /* CONCEPT: useState
+    Why? For variables that should trigger a UI re-render when they change.
+    Here we manage the currently logged-in user, the database of all profiles,
+    and the list of text logs appearing at the bottom.
+  */
+  const [activeSession, setActiveSession] = useState<Profile | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([
-    { id: "1", username: "mansoorghauri", role: "Software Engineer", isOnline: true, messagesSent: 0 },
-    { id: "2", username: "sarahodd", role: "UI Designer", isOnline: false, messagesSent: 0 }
+    { id: "1", username: "mansoorghauri", password: "mansoor123", role: "Software Engineer", isOnline: true, messagesSent: 0 },
+    { id: "2", username: "sarahodd", password: "sarah123", role: "UI Designer", isOnline: false, messagesSent: 0 }
   ]);
-
-  const [formData, setFormData] = useState({
-    username: "",
-    role: ""
-  });
-  // for errors
-  const [formErrors, setFormErrors] = useState({
-  username: "",
-  role: ""
-});
-
   const [onScreenLogs, setOnScreenLogs] = useState<string[]>([]);
-  const totalClicksTracker = useRef<number>(0);
-  const messageInputRef = useRef<HTMLInputElement>(null);
 
+  /* CONCEPT: useRef
+    Why? For mutable values that you want to remember across renders,
+    BUT you DO NOT want to trigger a component re-render when they change.
+    We use it here to silently track background clicks.
+  */
+  const totalClicksTracker = useRef<number>(0);
+
+  // Helper function to update our logs state
   const pushLog = (text: string) => {
     setOnScreenLogs((currentLogs) => [...currentLogs, text]);
   };
 
+  /* CONCEPT: useEffect
+    Why? To run "side effects". The empty dependency array `[]` means
+    this code will only run exactly once when the App component first mounts.
+  */
   useEffect(() => {
-    pushLog("🚀 EFFECT 1 triggered: Webpage loaded completely for the first time!");
+    pushLog("App mounted. Awaiting secure authentication...");
   }, []);
 
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleCreateProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-
-
-    // --- START OF VALIDATION BOUNCER ---
-    // Create a temporary object to hold any errors we find
-    let errorsFound = { username: "", role: "" };
-    let isDataValid = true;
-
-    // Rule 1 & 2: Username checks
-    if (formData.username.trim().length < 3){
-      errorsFound.username = "Username must be at least 3 characters long.";
-      isDataValid = false;
-    }
-    else if (formData.username.includes(" ")){
-      errorsFound.username = "Username cannot contain spaces.";
-      isDataValid = false;
-    }
-
-    // Rule 3: Role check
-    if (!formData.role.trim()){
-      errorsFound.role = "Please provide a job role.";
-      isDataValid = false;
-    }
-
-    // Update our React state so the UI shows the red text (if any)
-    setFormErrors(errorsFound);
-
-    // If the bouncer found errors, STOP right here. Do not create the card.
-    if (!isDataValid) {
-      pushLog("⚠️ [ERROR]: Profile creation blocked due to invalid data.");
-      return;
-    }
-    // --- END OF VALIDATION BOUNCER ---
-
-    const newProfile: Profile = {
-      id: Date.now().toString(),
-      username: formData.username,
-      role: formData.role,
-      isOnline: true,
-      messagesSent: 0
-    };
-
-    setProfiles((prev) => [...prev, newProfile]);
-    pushLog(`[CREATE]: Added new profile for "${formData.username}"`);
-
-    setFormData({ username: "", role: "" });
-  };
-
-  const handlePingUser = (id: string, name: string) => {
-    totalClicksTracker.current += 1;
-    setProfiles((prevProfiles) =>
-      prevProfiles.map((profile) =>
-        profile.id === id ? { ...profile, messagesSent: profile.messagesSent + 1 } : profile
+  /* CONCEPT: useOptimistic (React 18/19 feature)
+    Why? To make the UI feel lightning fast.
+    Instead of waiting for the database to reply (which takes time), we create
+    an "optimistic" version of our state. We update the UI instantly assuming
+    the network request will succeed, while the real request happens in the background.
+  */
+  const [optimisticProfiles, setOptimisticProfiles] = useOptimistic(
+    profiles, // The base state to build upon
+    (currentProfiles, idToUpdate: string) =>
+      currentProfiles.map((profile) =>
+        profile.id === idToUpdate
+          ? { ...profile, messagesSent: profile.messagesSent + 1 } // Fake it till you make it!
+          : profile
       )
-    );
-    pushLog(`[UPDATE]: Pinged user "${name}"`);
+  );
+
+  const handlePingUserAction = (id: string) => {
+    /* CONCEPT: startTransition
+      Why? It tells React: "This state update is a transition (not urgent).
+      Keep the UI responsive while you figure it out in the background."
+      It is required to trigger the `useOptimistic` state update above.
+    */
+    startTransition(async () => {
+      // 1. Update our silent tracker (no re-render caused here)
+      totalClicksTracker.current += 1;
+
+      // 2. Trigger the instant, optimistic UI update
+      setOptimisticProfiles(id);
+      pushLog(`[OPTIMISTIC]: UI instantly updated. Sending to database...`);
+
+      try {
+        // 3. Simulate a slow network/database request (1.5 seconds)
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        // 4. Actually update the TRUE state now that the "network" succeeded
+        setProfiles((prevProfiles) =>
+          prevProfiles.map((profile) =>
+            profile.id === id ? { ...profile, messagesSent: profile.messagesSent + 1 } : profile
+          )
+        );
+        pushLog(`[SUCCESS]: Database successfully saved the ping!`);
+      } catch (error) {
+        // If it failed, the optimistic state automatically rolls back!
+        pushLog(`[ERROR]: Network failed. Rolling back UI.`);
+      }
+    });
   };
 
-  const handleToggleStatus = (id: string, name: string) => {
+  // Standard state update (React will re-render to reflect the new boolean)
+  const handleToggleStatus = (id: string) => {
     setProfiles((prevProfiles) =>
       prevProfiles.map((profile) =>
         profile.id === id ? { ...profile, isOnline: !profile.isOnline } : profile
       )
     );
-    pushLog(`[UPDATE]: Toggled status for "${name}"`);
+    pushLog(`[UPDATE]: Toggled online status.`);
   };
 
+  // Standard state update removing an item from the array
   const handleDeleteUser = (id: string, name: string) => {
     setProfiles((prevProfiles) => prevProfiles.filter((profile) => profile.id !== id));
-    pushLog(`[DELETE]: Erased "${name}" from the application state.`);
-  };
-
-  const handleFocusInput = () => {
-    if (messageInputRef.current) {
-      messageInputRef.current.focus();
-      messageInputRef.current.style.backgroundColor = "#fffde7";
-      pushLog("Ref Action: Physically focused input element via useRef pointer!");
+    pushLog(`[DELETE]: Erased "${name}" from the database.`);
+    
+    // Safety check: if you delete yourself, log yourself out!
+    if (activeSession && activeSession.username === name) {
+      setActiveSession(null);
+      pushLog("[AUTH]: Active session terminated because profile was deleted.");
     }
   };
 
+  // Reads from the `useRef`. Notice how the UI didn't re-render as this number went up!
   const handleCheckNotepad = () => {
     alert(`Total background interaction clicks logged in notepad: ${totalClicksTracker.current}`);
   };
 
+  // Determine which user data to show based on the active session.
+  // We read from `optimisticProfiles` so the user sees the snappy, instant updates.
+  const currentUserData = activeSession
+    ? optimisticProfiles.find(p => p.id === activeSession.id)
+    : null;
+
   return (
+    /* CONCEPT: Context Provider
+      Wrapping our app in `LogContext.Provider` makes the `pushLog` function
+      available to any component nested inside of it, no matter how deep.
+    */
     <LogContext.Provider value={pushLog}>
       <div style={{ padding: "40px", fontFamily: "sans-serif", maxWidth: "900px", margin: "0 auto" }}>
         
-        <header style={{ marginBottom: "20px" }}>
-          <h1>Full Profile CRUD Dashboard</h1>
-          <p style={{ color: "#666" }}>Add, edit, ping, or destroy profiles live using reactive architecture.</p>
-        </header>
+        {/* Conditional Rendering: Show login if no session, else show dashboard */}
+        {!activeSession ? (
+          <LoginForm
+            profilesList={profiles}
+            onLoginSuccess={(userObject) => setActiveSession(userObject)}
+            onRegisterSuccess={(newProfile) => {
+              setProfiles((prev) => [...prev, newProfile]);
+              setActiveSession(newProfile);
+            }}
+          />
+        ) : (
+          <>
+            <header style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h1>Personal Dashboard</h1>
+                <p style={{ color: "#007bff", fontWeight: "bold", margin: 0, fontSize: "1.1rem" }}>
+                  Active Session: Welcome, {activeSession.username}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button onClick={handleCheckNotepad} style={{ padding: "8px 12px", cursor: "pointer", backgroundColor: "#333", color: "white", border: "none", borderRadius: "4px" }}>
+                  Inspect Interactions
+                </button>
+                <button onClick={() => { setActiveSession(null); pushLog("🔒 [AUTH]: User successfully logged out."); }} style={{ padding: "8px 12px", backgroundColor: "#dc3545", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}>
+                  Logout
+                </button>
+              </div>
+            </header>
 
-        <div style={{ backgroundColor: "#f0f4f8", padding: "20px", borderRadius: "8px", marginBottom: "25px" }}>
-          <form onSubmit={handleCreateProfile} style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "15px" }}>
-  
-            {/* Username Section */}
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <input
-                ref={messageInputRef}
-                type="text"
-                name="username"
-                placeholder="Username..."
-                value={formData.username}
-                onChange={handleInputChange}
-                // Give it a red border if there is an error!
-                style={{ padding: "10px", border: formErrors.username ? "2px solid red" : "1px solid #ccc", borderRadius: "4px" }}
-              />
-              {/* If formErrors.username has text, display this red span */}
-              {formErrors.username && (
-                <span style={{ color: "red", fontSize: "0.85rem", marginTop: "4px", fontWeight: "bold" }}>
-                  {formErrors.username}
-                </span>
+            <div style={{ display: "flex", justifyContent: "center", gap: "20px", flexWrap: "wrap", backgroundColor: "#f9f9f9", padding: "40px", border: "2px solid #ccc", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)" }}>
+              {currentUserData ? (
+                <UserProfileCard
+                  username={currentUserData.username}
+                  role={currentUserData.role}
+                  isOnline={currentUserData.isOnline}
+                  messagesSent={currentUserData.messagesSent}
+                >
+                  <button onClick={() => handlePingUserAction(currentUserData.id)}
+                  style={{ padding: "5px", cursor: "pointer", backgroundColor: "lightgreen", border: "1px solid black", borderRadius: "4px", fontWeight: "bold" }}>
+                    Ping Self
+                  </button>
+                  <button onClick={() => handleToggleStatus(currentUserData.id)} style={{ padding: "5px", cursor: "pointer", backgroundColor: "#e2e8f0", border: "1px solid gray", borderRadius: "4px" }}>
+                    Toggle My Status
+                  </button>
+                  <button onClick={() => handleDeleteUser(currentUserData.id, currentUserData.username)} style={{ padding: "5px", cursor: "pointer", backgroundColor: "#ffccd5", color: "#b70000", border: "1px solid #b70000", borderRadius: "4px", fontWeight: "bold" }}>
+                    Delete Account
+                  </button>
+                </UserProfileCard>
+              ) : (
+                <p style={{ color: "red" }}>Error loading user data.</p>
               )}
             </div>
-            
-            {/* Role Section */}
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <input
-                type="text"
-                name="role"
-                placeholder="Job Role..."
-                value={formData.role}
-                onChange={handleInputChange}
-                style={{ padding: "10px", border: formErrors.role ? "2px solid red" : "1px solid #ccc", borderRadius: "4px" }}
-              />
-              {formErrors.role && (
-                <span style={{ color: "red", fontSize: "0.85rem", marginTop: "4px", fontWeight: "bold" }}>
-                  {formErrors.role}
-                </span>
-              )}
-            </div>
-            
-            <button type="submit" style={{ padding: "10px 15px", backgroundColor: "#28a745", color: "white", border: "none", borderRadius: "4px", fontWeight: "bold", cursor: "pointer", width: "150px" }}>
-              Create Card
-            </button>
-          </form>
+          </>
+        )}
 
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button onClick={handleFocusInput} style={{ padding: "8px 12px", cursor: "pointer", fontWeight: "bold", backgroundColor: "#007bff", color: "white", border: "none", borderRadius: "4px" }}>
-              Focus Username Field
-            </button>
-            <button onClick={handleCheckNotepad} style={{ padding: "8px 12px", cursor: "pointer", backgroundColor: "#333", color: "white", border: "none", borderRadius: "4px" }}>
-              Inspect Total Pings Notepad
-            </button>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "center", gap: "20px", flexWrap: "wrap", backgroundColor: "#f9f9f9", padding: "20px", border: "2px solid #ccc", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)" }}>
-          
-          {profiles.length === 0 && <p style={{ color: "#777", fontWeight: "bold" }}>No profiles exist right now. Create one above!</p>}
-
-          {profiles.map((user) => (
-            <UserProfileCard
-              key={user.id}
-              username={user.username}
-              role={user.role}
-              isOnline={user.isOnline}
-              messagesSent={user.messagesSent}
-            >
-              <button onClick={() => handlePingUser(user.id, user.username)} style={{ padding: "5px", cursor: "pointer", backgroundColor: "lightgreen", border: "1px solid black", borderRadius: "4px", fontWeight: "bold" }}>
-                Ping {user.username}
-              </button>
-              
-              <button onClick={() => handleToggleStatus(user.id, user.username)} style={{ padding: "5px", cursor: "pointer", backgroundColor: "#e2e8f0", border: "1px solid gray", borderRadius: "4px" }}>
-                Toggle Status
-              </button>
-
-              <button onClick={() => handleDeleteUser(user.id, user.username)} style={{ padding: "5px", cursor: "pointer", backgroundColor: "#ffccd5", color: "#b70000", border: "1px solid #b70000", borderRadius: "4px", fontWeight: "bold" }}>
-                Delete Profile
-              </button>
-            </UserProfileCard>
-          ))}
-
-        </div>
-
+        {/* Live Logs Monitor rendering the `onScreenLogs` state array */}
         <div style={{ marginTop: "40px", backgroundColor: "#222", color: "#00ff00", padding: "20px", borderRadius: "8px", fontFamily: "monospace" }}>
           <h3 style={{ margin: "0 0 10px 0", color: "#fff", borderBottom: "1px solid #444", paddingBottom: "5px" }}>
             Live Monitor Logs:
