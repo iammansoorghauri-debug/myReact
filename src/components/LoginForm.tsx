@@ -1,16 +1,14 @@
 // src/components/LoginForm.tsx
 import { useState, useContext } from "react";
-import { useFormStatus } from "react-dom";
+
+import { Form, useActionData, useNavigation } from "react-router";
 import { LogContext } from "../App";
 
-interface LoginFormProps {
-    profilesList: any[];
-    onLoginSuccess: (authenticatedUser: any) => void;
-    onRegisterSuccess: (newUser: any) => void;
-}
 
 function ActionButton({ pendingText, defaultText }: { pendingText: string, defaultText: string }) {
-    const { pending } = useFormStatus();
+    const navigation = useNavigation();
+    const pending = navigation.state === "submitting";
+
     return (
         <button
         type="submit"
@@ -30,71 +28,12 @@ function ActionButton({ pendingText, defaultText }: { pendingText: string, defau
     );
 }
 
-export function LoginForm({ profilesList, onLoginSuccess, onRegisterSuccess }: LoginFormProps) {
-    const pushLog = useContext(LogContext);
+export function LoginForm() {
     
-    const [errorMessage, setErrorMessage] = useState("");
+    const actionData = useActionData() as { error?: string } | undefined;
+    const errorMessage = actionData?.error;
+
     const [isRegistering, setIsRegistering] = useState(false);
-
-    const handleLoginAction = async (formData: FormData) => {
-        setErrorMessage("");
-        const usernameInput = formData.get("loginUsername") as string;
-        const passwordInput = formData.get("loginPassword") as string;
-
-        if (pushLog)
-            pushLog(`[AUTH]: Processing login attempt for: "${usernameInput}"...`);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        const matchedUser = profilesList.find(
-        (user) => user.username === usernameInput && user.password === passwordInput
-        );
-
-        if (matchedUser){
-            if (pushLog)
-                pushLog(`[AUTH SUCCESS]: Access granted to ${usernameInput}.`);
-            onLoginSuccess(matchedUser);
-        }
-        else{
-            if (pushLog)
-                pushLog(`[AUTH FAILED]: No profile matched credentials.`);
-            setErrorMessage("Invalid username or password.");
-        }
-    };
-
-    const handleRegisterAction = async (formData: FormData) => {
-        setErrorMessage("");
-        const newUsername = formData.get("regUsername") as string;
-        const newPassword = formData.get("regPassword") as string;
-        const newRole = formData.get("regRole") as string;
-
-        if (newUsername.trim().length < 3 || newUsername.includes(" ")) {
-            setErrorMessage("Username must be at least 3 chars and contain no spaces.");
-        return;
-        }
-        if (profilesList.some(p => p.username === newUsername)) {
-            setErrorMessage("That username is already taken.");
-        return;
-        }
-
-        if (pushLog)
-            pushLog(`[REGISTER]: Building new profile for: "${newUsername}"...`);
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-
-        const newProfile = {
-        id: Date.now().toString(),
-        username: newUsername,
-        password: newPassword,
-        role: newRole,
-        isOnline: true,
-        messagesSent: 0
-        };
-
-        if (pushLog)
-            pushLog(`[REGISTER SUCCESS]: Profile created! Auto-logging in...`);
-        onRegisterSuccess(newProfile);
-    };
-
-
 
     return (
         <div style={{
@@ -117,26 +56,32 @@ export function LoginForm({ profilesList, onLoginSuccess, onRegisterSuccess }: L
         </div>
 
         {!isRegistering ? (
-            <form action={handleLoginAction} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+            <Form method="post" style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                <input type="hidden" name="intent" value="login" />
+
                 <input
                 type="text"
                 name="loginUsername"
                 placeholder="Username..."
                 required
-                style={{ padding: "10px", border: "1px solid #ccc", borderRadius: "4px" }} />
+                style={{ padding: "10px", border: "1px solid #ccc", borderRadius: "4px" }}
+                />
 
                 <input
                 type="password"
                 name="loginPassword"
                 placeholder="Password..."
                 required
-                style={{ padding: "10px", border: "1px solid #ccc", borderRadius: "4px" }} />
+                style={{ padding: "10px", border: "1px solid #ccc", borderRadius: "4px" }}
+                />
 
                 {errorMessage && <span style={{ color: "red", fontSize: "0.85rem", fontWeight: "bold", textAlign: "center" }}>{errorMessage}</span>}
                 <ActionButton defaultText="Secure Login" pendingText="Verifying Keys..." />
-            </form>
+            </Form>
         ) : (
-            <form action={handleRegisterAction} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+            <Form method="post" style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                <input type="hidden" name="intent" value="register" />
+
                 <input
                 type="text"
                 name="regUsername"
@@ -160,11 +105,11 @@ export function LoginForm({ profilesList, onLoginSuccess, onRegisterSuccess }: L
 
                 {errorMessage && <span style={{ color: "red", fontSize: "0.85rem", fontWeight: "bold", textAlign: "center" }}>{errorMessage}</span>}
                 <ActionButton defaultText="Create Profile" pendingText="Building Profile..." />
-            </form>
+            </Form>
         )}
 
         <button
-            onClick={() => { setIsRegistering(!isRegistering); setErrorMessage(""); }}
+            onClick={() => setIsRegistering(!isRegistering)}
             style={{ background: "none", border: "none", color: "#007bff", textDecoration: "underline", cursor: "pointer", fontSize: "0.9rem" }}
         >
             {isRegistering ? "Already have a profile? Log in." : "Need an account? Sign up here."}
