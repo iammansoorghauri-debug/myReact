@@ -1,10 +1,11 @@
 // src/components/ProtectedRoute.tsx
 import React from "react";
-import { Navigate, useOutletContext } from "react-router";
-import type { AppContextType } from "../App";
+import { Navigate } from "react-router";
+import { useAppStore } from "../stores/appStore";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-    const { activeSession } = useOutletContext<AppContextType>();
+    // Select strictly the session variable from the external vault
+    const activeSession = useAppStore((state) => state.activeSession);
 
     if (!activeSession) {
         return <Navigate to="/login" replace />;

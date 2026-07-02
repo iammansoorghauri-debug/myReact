@@ -1,6 +1,6 @@
 // src/components/UserProfileCard.tsx
-import React, { useContext } from "react";
-import { LogContext } from "../App";
+import React from "react";
+import { useAppStore } from "../stores/appStore";
 
 interface UserProfileProps {
   username: string;
@@ -11,12 +11,11 @@ interface UserProfileProps {
 }
 
 export function UserProfileCard({ username, role, isOnline, messagesSent, children }: UserProfileProps) {
-  const pushGlobalLog = useContext(LogContext);
+  // Grab the logging action selector directly from the central store
+  const pushGlobalLog = useAppStore((state) => state.pushLog);
 
   const handleCardClick = () => {
-    if (pushGlobalLog) {
-      pushGlobalLog(`Context Broadcast: User interacted with ${username}'s profile card.`);
-    }
+    pushGlobalLog(`Context Broadcast: User interacted with ${username}'s profile card.`);
   };
 
   return (

@@ -1,9 +1,6 @@
 // src/components/LoginForm.tsx
-import { useState, useContext } from "react";
-
+import { useState } from "react";
 import { Form, useActionData, useNavigation } from "react-router";
-import { LogContext } from "../App";
-
 
 function ActionButton({ pendingText, defaultText }: { pendingText: string, defaultText: string }) {
     const navigation = useNavigation();

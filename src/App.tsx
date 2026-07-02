@@ -1,13 +1,13 @@
 // src/App.tsx
-import React, { useState, useEffect, createContext, useCallback, useRef, useOptimistic, startTransition, Suspense, useMemo } from "react";
+import React, { useEffect, useOptimistic, startTransition, Suspense } from "react";
 import { createBrowserRouter, Outlet, useNavigate, useOutletContext, Link, Navigate, useSearchParams, useLoaderData } from "react-router";
 
 import { ProtectedRoute } from "./components/ProtectedRoute";
-
 import { fakeDB } from "./lib/fakeDB";
 import type { Profile } from "./lib/fakeDB";
-import { loginAction, logoutUser } from "./actions/auth";
+import { loginAction } from "./actions/auth";
 import { rootLoader, profileLoader } from "./loaders/routeLoaders";
+import { useAppStore } from "./stores/appStore";
 
 //-----------------------------------------------------------------
 
@@ -19,39 +19,34 @@ const UserProfileCard = React.lazy(() =>
   import("./components/UserProfileCard").then((module) => ({ default: module.UserProfileCard }))
 );
 
-export const LogContext = createContext<((text: string) => void) | null>(null);
 
+// Context type blueprint is now simplified strictly to local optimistic UI handling
 export type AppContextType = {
-  activeSession: Profile | null;
-  setActiveSession: (p: Profile | null) => void;
   optimisticProfiles: Profile[];
-  handleRegisterUser: (newProfile: Profile) => void;
   handlePingUserAction: (id: string) => void;
-  handleToggleStatus: (id: string) => void;
-  handleDeleteUser: (id: string, name: string) => void;
-  handleCheckNotepad: () => void;
-  handleLogout: () => void;
 };
 
 function RootStateLayout() {
   const loaderData = useLoaderData() as { activeSession: Profile | null, profiles: Profile[] };
 
-  const [activeSession, setActiveSession] = useState<Profile | null>(loaderData.activeSession);
-  const [profiles, setProfiles] = useState<Profile[]>(loaderData.profiles);
-  const [onScreenLogs, setOnScreenLogs] = useState<string[]>([]);
-  const totalClicksTracker = useRef<number>(0);
+  // Selectors to grab global data sync hooks and logs
+  const profiles = useAppStore((state) => state.profiles);
+  const onScreenLogs = useAppStore((state) => state.onScreenLogs);
+  const setInitialData = useAppStore((state) => state.setInitialData);
+  const pushLog = useAppStore((state) => state.pushLog);
+  const incrementClicks = useAppStore((state) => state.incrementClicks);
+  const syncProfilesAfterPing = useAppStore((state) => state.syncProfilesAfterPing);
 
+  // Keep state synchronized with React Router Loaders
   useEffect(() => {
-    setActiveSession(loaderData.activeSession);
-    setProfiles(loaderData.profiles);
-  }, [loaderData]);
-
-  const pushLog = useCallback((text: string) => setOnScreenLogs((prev) => [...prev, text]), []);
+    setInitialData(loaderData.activeSession, loaderData.profiles);
+  }, [loaderData, setInitialData]);
 
   useEffect(() => {
     pushLog("App mounted. System initialized.");
-  }, []);
+  }, [pushLog]);
 
+  // Keep UX Optimistic hook bounded directly to the current state array slice
   const [optimisticProfiles, setOptimisticProfiles] = useOptimistic(
     profiles,
     (currentProfiles, idToUpdate: string) =>
@@ -60,21 +55,9 @@ function RootStateLayout() {
       )
   );
 
-  const handleLogout = useCallback(() => {
-    logoutUser(); // This clears the fakeDB database session
-    setActiveSession(null); // This clears the React UI state
-    pushLog("[AUTH]: Active session terminated. Redirecting to gateway...");
-  }, [pushLog]);
-
-  const handleRegisterUser = useCallback((newProfile: Profile) => {
-    setProfiles((prev) => [...prev, newProfile]);
-    setActiveSession(newProfile);
-    pushLog(`[REGISTER SUCCESS]: Added "${newProfile.username}" to the core database state array.`);
-  }, [pushLog]);
-
-  const handlePingUserAction = useCallback((id: string) => {
+  const handlePingUserAction = (id: string) => {
     startTransition(async () => {
-      totalClicksTracker.current += 1;
+      incrementClicks();
       setOptimisticProfiles(id);
       pushLog(`[OPTIMISTIC]: UI instantly updated. Sending to database...`);
       try {
@@ -85,93 +68,53 @@ function RootStateLayout() {
           dbProfile.messagesSent += 1;
         }
 
-        setProfiles((prevProfiles) =>
-          prevProfiles.map((profile) =>
-            profile.id === id ? { ...profile, messagesSent: profile.messagesSent + 1 } : profile
-          )
-        );
+        syncProfilesAfterPing(id);
         pushLog(`[SUCCESS]: Database successfully saved the ping!`);
-      }
-      catch (error) {
+      } catch (error) {
         pushLog(`[ERROR]: Network failed. Rolling back UI.`);
       }
     });
-  }, [pushLog, setOptimisticProfiles]);
-
-  const handleToggleStatus = useCallback((id: string) => {
-
-    const dbProfile = fakeDB.profiles.find(p => p.id === id);
-    if (dbProfile) {
-      dbProfile.isOnline = !dbProfile.isOnline;
-    }
-
-    setProfiles((prev) => prev.map((p) => p.id === id ? { ...p, isOnline: !p.isOnline } : p));
-    pushLog(`[UPDATE]: Toggled online status.`);
-  }, [pushLog]);
-
-  const handleDeleteUser = useCallback((id: string, name: string) => {
-
-    fakeDB.profiles = fakeDB.profiles.filter((p) => p.id !== id);
-
-    setProfiles((prev) => prev.filter((p) => p.id !== id));
-    pushLog(`[DELETE]: Erased "${name}" from the database.`);
-    if (activeSession && activeSession.username === name) {
-      setActiveSession(null);
-      pushLog("[AUTH]: Active session terminated because profile was deleted.");
-    }
-  }, [pushLog, activeSession]);
-
-  const handleCheckNotepad = () => {
-    alert(`Total background interaction clicks: ${totalClicksTracker.current}`);
   };
 
-  const contextValue: AppContextType = useMemo(() => ({
-    activeSession,
-    setActiveSession,
+  const contextValue: AppContextType = {
     optimisticProfiles,
-    handleRegisterUser,
-    handlePingUserAction,
-    handleToggleStatus,
-    handleDeleteUser,
-    handleCheckNotepad,
-    handleLogout
-  }), [activeSession,
-      optimisticProfiles,
-      handleRegisterUser,
-      handlePingUserAction,
-      handleToggleStatus,
-      handleDeleteUser,
-      handleCheckNotepad,
-      handleLogout]);
+    handlePingUserAction
+  };
 
   return (
-    <LogContext.Provider value={pushLog}>
-      <div style={{ padding: "40px", fontFamily: "sans-serif", maxWidth: "900px", margin: "0 auto" }}>
-        <Suspense fallback={<div style={{ padding: "30px", textAlign: "center", color: "#007bff",
-          fontWeight: "bold", fontFamily: "monospace" }}>⚡ SECURING GATEWAY CHUNK...</div>}>
-          <Outlet context={contextValue} />
-        </Suspense>
+    <div style={{ padding: "40px", fontFamily: "sans-serif", maxWidth: "900px", margin: "0 auto" }}>
+      <Suspense fallback={<div style={{ padding: "30px", textAlign: "center", color: "#007bff", fontWeight: "bold", fontFamily: "monospace" }}>⚡ SECURING GATEWAY CHUNK...</div>}>
+        <Outlet context={contextValue} />
+      </Suspense>
 
-        <div style={{ marginTop: "40px", backgroundColor: "#222", color: "#00ff00", padding: "20px", borderRadius: "8px", fontFamily: "monospace" }}>
-          <h3 style={{ margin: "0 0 10px 0", color: "#fff", borderBottom: "1px solid #444", paddingBottom: "5px" }}>Live Monitor Logs:</h3>
-          {onScreenLogs.map((logItem, index) => (
-            <div key={index} style={{ marginBottom: "6px" }}>[{index + 1}] {logItem}</div>
-          ))}
-        </div>
+      <div style={{ marginTop: "40px", backgroundColor: "#222", color: "#00ff00", padding: "20px", borderRadius: "8px", fontFamily: "monospace" }}>
+        <h3 style={{ margin: "0 0 10px 0", color: "#fff", borderBottom: "1px solid #444", paddingBottom: "5px" }}>Live Monitor Logs:</h3>
+        {onScreenLogs.map((logItem, index) => (
+          <div key={index} style={{ marginBottom: "6px" }}>[{index + 1}] {logItem}</div>
+        ))}
       </div>
-    </LogContext.Provider>
+    </div>
   );
 }
 
 function DashboardLayout() {
-  // 💡 FIXED: Added handleLogout here to pull it out of the context hook safely!
-  const { activeSession, handleCheckNotepad, optimisticProfiles, handleLogout } = useOutletContext<AppContextType>();
+  const { optimisticProfiles } = useOutletContext<AppContextType>();
+  
+  // Zustand selectors replacing context extraction
+  const activeSession = useAppStore((state) => state.activeSession);
+  const totalClicks = useAppStore((state) => state.totalClicks);
+  const handleLogout = useAppStore((state) => state.handleLogout);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const roleQuery = searchParams.get("role") || "";
 
   const matchingProfiles = roleQuery
     ? optimisticProfiles.filter((p) => p.role.toLowerCase().includes(roleQuery.toLowerCase()))
     : [];
+
+  const handleCheckNotepad = () => {
+    alert(`Total background interaction clicks: ${totalClicks}`);
+  };
 
   return (
     <>
@@ -233,7 +176,7 @@ function DashboardLayout() {
 }
 
 function LoginPageClean() {
-  const { activeSession } = useOutletContext<AppContextType>();
+  const activeSession = useAppStore((state) => state.activeSession);
   
   if (activeSession)
     return <Navigate to={`/dashboard/profile/${activeSession.id}`} replace />;
@@ -242,14 +185,18 @@ function LoginPageClean() {
 }
 
 function DashboardRedirector(){
-  const { activeSession } = useOutletContext<AppContextType>();
+  const activeSession = useAppStore((state) => state.activeSession);
   return <Navigate to={`/dashboard/profile/${activeSession?.id}`} replace />;
 }
 
 function ProfileDetail() {
   const loaderUser = useLoaderData() as Profile;
   
-  const { optimisticProfiles, handlePingUserAction, handleToggleStatus, handleDeleteUser } = useOutletContext<AppContextType>();
+  const { optimisticProfiles, handlePingUserAction } = useOutletContext<AppContextType>();
+  
+  // Zustand selectors replacing layout layers
+  const handleToggleStatus = useAppStore((state) => state.handleToggleStatus);
+  const handleDeleteUser = useAppStore((state) => state.handleDeleteUser);
   const navigate = useNavigate();
 
   const targetUser = optimisticProfiles.find((p) => p.id === loaderUser.id) || loaderUser;
@@ -283,14 +230,8 @@ export const appRouter = createBrowserRouter([
     element: <RootStateLayout />,
     loader: rootLoader,
     children: [
-      { index: true,
-        element: <Navigate to="/login" replace />
-      },
-      {
-        path: "login",
-        element: <LoginPageClean />,
-        action: loginAction
-      },
+      { index: true, element: <Navigate to="/login" replace /> },
+      { path: "login", element: <LoginPageClean />, action: loginAction },
       {
         path: "dashboard",
         element: (
@@ -299,13 +240,8 @@ export const appRouter = createBrowserRouter([
           </ProtectedRoute>
         ),
         children: [
-          { index: true,
-            element: <DashboardRedirector /> },
-          {
-            path: "profile/:userId",
-            element: <ProfileDetail />,
-            loader: profileLoader
-          }
+          { index: true, element: <DashboardRedirector /> },
+          { path: "profile/:userId", element: <ProfileDetail />, loader: profileLoader }
         ]
       }
     ]
