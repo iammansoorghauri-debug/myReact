@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useState, useEffect, createContext, useRef, useOptimistic, startTransition, Suspense } from "react";
+import React, { useState, useEffect, createContext, useCallback, useRef, useOptimistic, startTransition, Suspense, useMemo } from "react";
 import { createBrowserRouter, Outlet, useNavigate, useOutletContext, Link, Navigate, useSearchParams, useLoaderData } from "react-router";
 
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -46,7 +46,7 @@ function RootStateLayout() {
     setProfiles(loaderData.profiles);
   }, [loaderData]);
 
-  const pushLog = (text: string) => setOnScreenLogs((prev) => [...prev, text]);
+  const pushLog = useCallback((text: string) => setOnScreenLogs((prev) => [...prev, text]), []);
 
   useEffect(() => {
     pushLog("App mounted. System initialized.");
@@ -60,19 +60,19 @@ function RootStateLayout() {
       )
   );
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     logoutUser(); // This clears the fakeDB database session
     setActiveSession(null); // This clears the React UI state
     pushLog("[AUTH]: Active session terminated. Redirecting to gateway...");
-  };
+  }, [pushLog]);
 
-  const handleRegisterUser = (newProfile: Profile) => {
+  const handleRegisterUser = useCallback((newProfile: Profile) => {
     setProfiles((prev) => [...prev, newProfile]);
     setActiveSession(newProfile);
     pushLog(`[REGISTER SUCCESS]: Added "${newProfile.username}" to the core database state array.`);
-  };
+  }, [pushLog]);
 
-  const handlePingUserAction = (id: string) => {
+  const handlePingUserAction = useCallback((id: string) => {
     startTransition(async () => {
       totalClicksTracker.current += 1;
       setOptimisticProfiles(id);
@@ -96,9 +96,9 @@ function RootStateLayout() {
         pushLog(`[ERROR]: Network failed. Rolling back UI.`);
       }
     });
-  };
+  }, [pushLog, setOptimisticProfiles]);
 
-  const handleToggleStatus = (id: string) => {
+  const handleToggleStatus = useCallback((id: string) => {
 
     const dbProfile = fakeDB.profiles.find(p => p.id === id);
     if (dbProfile) {
@@ -107,9 +107,9 @@ function RootStateLayout() {
 
     setProfiles((prev) => prev.map((p) => p.id === id ? { ...p, isOnline: !p.isOnline } : p));
     pushLog(`[UPDATE]: Toggled online status.`);
-  };
+  }, [pushLog]);
 
-  const handleDeleteUser = (id: string, name: string) => {
+  const handleDeleteUser = useCallback((id: string, name: string) => {
 
     fakeDB.profiles = fakeDB.profiles.filter((p) => p.id !== id);
 
@@ -119,13 +119,13 @@ function RootStateLayout() {
       setActiveSession(null);
       pushLog("[AUTH]: Active session terminated because profile was deleted.");
     }
-  };
+  }, [pushLog, activeSession]);
 
   const handleCheckNotepad = () => {
     alert(`Total background interaction clicks: ${totalClicksTracker.current}`);
   };
 
-  const contextValue: AppContextType = {
+  const contextValue: AppContextType = useMemo(() => ({
     activeSession,
     setActiveSession,
     optimisticProfiles,
@@ -135,7 +135,14 @@ function RootStateLayout() {
     handleDeleteUser,
     handleCheckNotepad,
     handleLogout
-  };
+  }), [activeSession,
+      optimisticProfiles,
+      handleRegisterUser,
+      handlePingUserAction,
+      handleToggleStatus,
+      handleDeleteUser,
+      handleCheckNotepad,
+      handleLogout]);
 
   return (
     <LogContext.Provider value={pushLog}>
