@@ -1,10 +1,13 @@
 // src/App.tsx
-import React, {useEffect, useOptimistic, startTransition, Suspense,
-} from "react";
+import React, {useEffect, useOptimistic, startTransition, Suspense} from "react";
 
-import { createBrowserRouter, Outlet, useNavigate, useOutletContext, Link, Navigate, useSearchParams,useLoaderData,
-} from "react-router";
+import { createBrowserRouter, Outlet, useNavigate, useOutletContext, Link, Navigate, useSearchParams, useLoaderData} from "react-router";
+
 import { Provider, useSelector, useDispatch } from "react-redux";
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+import { ProductsPage } from "./pages/ProductsPage";
 
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { fakeDB } from "./lib/fakeDB";
@@ -14,21 +17,16 @@ import { rootLoader, profileLoader } from "./loaders/routeLoaders";
 
 // Redux Toolkit Imports
 import { store, type RootState, type AppDispatch } from "./stores/store";
-import {setInitialData,pushLog, handleLogout, handleToggleStatus, handleDeleteUser, incrementClicks, syncProfilesAfterPing
-} from "./stores/appSlice";
+import {setInitialData, pushLog, handleLogout, handleToggleStatus, handleDeleteUser, incrementClicks, syncProfilesAfterPing } from "./stores/appSlice";
 
 //-----------------------------------------------------------------
 
 const LoginForm = React.lazy(() =>
-  import("./components/LoginForm").then((module) => ({
-    default: module.LoginForm,
-  }))
+  import("./components/LoginForm").then((module) => ({ default: module.LoginForm}))
 );
 
 const UserProfileCard = React.lazy(() =>
-  import("./components/UserProfileCard").then((module) => ({
-    default: module.UserProfileCard,
-  }))
+  import("./components/UserProfileCard").then((module) => ({ default: module.UserProfileCard }))
 );
 
 // Context type blueprint is now simplified strictly to local optimistic UI handling
@@ -38,10 +36,7 @@ export type AppContextType = {
 };
 
 function RootStateLayout() {
-  const loaderData = useLoaderData() as {
-    activeSession: Profile | null;
-    profiles: Profile[];
-  };
+  const loaderData = useLoaderData() as { activeSession: Profile | null; profiles: Profile[]; };
 
   // Redux: Dispatcher and Selectors
   const dispatch = useDispatch<AppDispatch>();
@@ -50,9 +45,9 @@ function RootStateLayout() {
 
   // Keep state synchronized with React Router Loaders via Dispatch
   useEffect(() => {
-    dispatch(setInitialData({ 
-        session: loaderData.activeSession, 
-        profilesList: loaderData.profiles 
+    dispatch(setInitialData({
+        session: loaderData.activeSession,
+        profilesList: loaderData.profiles
     }));
   }, [loaderData, dispatch]);
 
@@ -86,7 +81,8 @@ function RootStateLayout() {
 
         dispatch(syncProfilesAfterPing(id));
         dispatch(pushLog(`[SUCCESS]: Database successfully saved the ping!`));
-      } catch (error) {
+      }
+      catch (error) {
         dispatch(pushLog(`[ERROR]: Network failed. Rolling back UI.`));
       }
     });
@@ -160,8 +156,7 @@ function DashboardLayout() {
   const [searchParams, setSearchParams] = useSearchParams();
   const roleQuery = searchParams.get("role") || "";
 
-  const matchingProfiles = roleQuery
-    ? optimisticProfiles.filter((p) =>
+  const matchingProfiles = roleQuery ? optimisticProfiles.filter((p) =>
         p.role.toLowerCase().includes(roleQuery.toLowerCase())
       )
     : [];
@@ -202,6 +197,19 @@ function DashboardLayout() {
           >
             Inspect Notepad
           </button>
+          <Link
+            to="/dashboard/products"
+            style={{
+              padding: "8px 12px",
+              backgroundColor: "#28a745",
+              color: "white",
+              textDecoration: "none",
+              borderRadius: "4px",
+              fontWeight: "bold",
+            }}
+          >
+            View Products
+          </Link>
           <Link
             to="/login"
             onClick={() => dispatch(handleLogout())}
@@ -331,8 +339,7 @@ function ProfileDetail() {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
 
-  const targetUser =
-    optimisticProfiles.find((p) => p.id === loaderUser.id) || loaderUser;
+  const targetUser = optimisticProfiles.find((p) => p.id === loaderUser.id) || loaderUser;
 
   return (
     <div
@@ -392,12 +399,18 @@ function ProfileDetail() {
 }
 
 // Wrap the root element in the Redux Provider
+// 1. Initialize the Query Client
+const queryClient = new QueryClient();
+
 export const appRouter = createBrowserRouter([
   {
     path: "/",
     element: (
       <Provider store={store}>
-        <RootStateLayout />
+        {/* 2. Wrap your layout in the QueryClientProvider */}
+        <QueryClientProvider client={queryClient}>
+          <RootStateLayout />
+        </QueryClientProvider>
       </Provider>
     ),
     loader: rootLoader,
@@ -418,6 +431,16 @@ export const appRouter = createBrowserRouter([
             element: <ProfileDetail />,
             loader: profileLoader,
           },
+          // ADD THE NEW ROUTE HERE:
+          {
+            path: "products",
+            element: (
+              // This is the curtain that falls while useSuspenseQuery is fetching!
+              <Suspense fallback={<div style={{ textAlign: "center", padding: "40px", fontSize: "1.2rem" }}>📦 Fetching Store Inventory...</div>}>
+                <ProductsPage />
+              </Suspense>
+            )
+          }
         ],
       },
     ],

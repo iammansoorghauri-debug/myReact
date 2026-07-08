@@ -16,9 +16,13 @@ const appSlice = createSlice({
     initialState,
     reducers: {
         setInitialData: (state, action: PayloadAction<{ session: Profile | null; profilesList: Profile[] }>) => {
-            state.activeSession = action.payload.session;
-            state.profiles = action.payload.profilesList;
+            // Clone instead of storing the same object references as fakeDB.
+            // Otherwise Immer's auto-freeze (dev mode) freezes fakeDB's objects too,
+            // and later direct mutations like `dbProfile.isOnline = ...` throw.
+            state.activeSession = action.payload.session ? { ...action.payload.session } : null;
+            state.profiles = action.payload.profilesList.map((p) => ({ ...p }));
         },
+
         pushLog: (state, action: PayloadAction<string>) => {
         // RTK uses Immer: We can push directly into the array without copying it!
             state.onScreenLogs.push(action.payload);
@@ -29,11 +33,13 @@ const appSlice = createSlice({
             state.activeSession = null;
             state.onScreenLogs.push("[AUTH]: Active session terminated. Redirecting to gateway...");
         },
+
         handleRegisterUser: (state, action: PayloadAction<Profile>) => {
             state.profiles.push(action.payload);
             state.activeSession = action.payload;
             state.onScreenLogs.push(`[REGISTER SUCCESS]: Added "${action.payload.username}" to the core database.`);
         },
+
         handleToggleStatus: (state, action: PayloadAction<string>) => {
             const id = action.payload;
 
