@@ -1,3 +1,5 @@
+// src/pages/ProductsPage.tsx
+
 import React from "react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { ProductCard, type Product } from "../components/ProductCard";
@@ -6,8 +8,12 @@ import { pushLog } from "../stores/appSlice";
 // @ts-ignore
 import { FixedSizeList as List } from "react-window";
 
+import { PRODUCT_CONSTANTS } from "../constants/appConstants";
+
 const fetchProducts = async (): Promise<Product[]> => {
-    const res = await fetch("https://api.escuelajs.co/api/v1/products");
+    const apiUrl = import.meta.env.VITE_API_BASE_URL;
+
+    const res = await fetch(`${apiUrl}/products`);
     if (!res.ok) throw new Error("Network response was not ok");
 
     const rawData = await res.json();
@@ -15,7 +21,7 @@ const fetchProducts = async (): Promise<Product[]> => {
         id: item.id,
         title: item.title,
         price: item.price,
-        category: item.category?.name || "General",
+        category: item.category?.name || PRODUCT_CONSTANTS.DEFAULT_CATEGORY,
         image: Array.isArray(item.images) ? item.images[0] : item.images
     }));
 };

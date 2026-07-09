@@ -1,3 +1,5 @@
+//src/components/ProductCard.tsx
+
 import React from "react";
 
 // The shape of the data coming from FakeStore API

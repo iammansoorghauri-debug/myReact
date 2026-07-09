@@ -117,7 +117,6 @@ export function LoginForm() {
             <strong>Valid Test Profiles:</strong>
             <ul style={{ margin: "5px 0 0 0", paddingLeft: "15px" }}>
                 <li>mansoorghauri / mansoor123</li>
-                <li>sarahodd / sarah123</li>
             </ul>
             </div>
         )}
