@@ -1,4 +1,4 @@
-// src/actions/auth.ts
+// src/features/auth/actions/auth.ts
 // @ts-ignore
 import { redirect } from "react-router";
 

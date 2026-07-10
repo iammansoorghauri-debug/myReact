@@ -9,38 +9,38 @@ import "@testing-library/jest-dom";
 // IMPORTANT SETUP: Because our component uses Redux (useDispatch),
 const mockDispatch = jest.fn(); // Creates a fake Jest tracking function
 jest.mock("react-redux", () => ({
-    useDispatch: () => mockDispatch,
+  useDispatch: () => mockDispatch,
 }));
 
 describe("UserProfileCard Component Testing", () => {
   // Test 1: Testing the visuals (Topic 2)
-    test("renders the username, role, and online status correctly", () => {
-        render(
-        <UserProfileCard
-            username="mansoorghauri"
-            role="Admin System"
-            isOnline={true}
-            messagesSent={10}
-        />
+  test("renders the username, role, and online status correctly", () => {
+    render(
+      <UserProfileCard
+        username="mansoorghauri"
+        role="Admin System"
+        isOnline={true}
+        messagesSent={10}
+      />
     );
 
     // 2. QUERY & ASSERT: Check if the text is physically on the screen
     expect(screen.getByText("mansoorghauri")).toBeInTheDocument();
     expect(screen.getByText("Admin System")).toBeInTheDocument();
     expect(screen.getByText("Online")).toBeInTheDocument();
-    });
+  });
 
   // Test 2: Testing User Interactions (Topic 3)
-    test("dispatches a Redux log when the card is clicked", async () => {
-        const user = userEvent.setup();
+  test("dispatches a Redux log when the card is clicked", async () => {
+    const user = userEvent.setup();
 
     render(
-        <UserProfileCard
+      <UserProfileCard
         username="sarahodd"
         role="User"
         isOnline={false}
         messagesSent={2}
-        />
+      />
     );
 
     const cardElement = screen.getByText("sarahodd");
@@ -49,5 +49,5 @@ describe("UserProfileCard Component Testing", () => {
     await user.click(cardElement);
 
     expect(mockDispatch).toHaveBeenCalled();
-    });
+  });
 });

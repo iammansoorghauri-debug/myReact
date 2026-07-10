@@ -1,4 +1,4 @@
-// src/components/LoginForm.tsx
+// src/features/auth/components/LoginForm.tsx
 import { useState } from "react";
 import { Form, useActionData, useNavigation } from "react-router";
 
